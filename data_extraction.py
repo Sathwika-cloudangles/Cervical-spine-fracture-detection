@@ -28,7 +28,7 @@ def data_extraction(bucket_name, zip_key, target_folder):
 
 # Usage example
 bucket_name = 'deeplearning-mlops-demo'
-image_zip_key = 'cervical_spine_images.zip'
+image_zip_key = 'cervical_xml_txt_img.zip'
 target = os.getcwd()
 
 data_extraction(bucket_name, image_zip_key, target)
