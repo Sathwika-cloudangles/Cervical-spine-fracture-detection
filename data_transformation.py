@@ -134,32 +134,51 @@ class CustomDataset(Dataset):
             except Exception as e:
                 print(f"Error parsing TXT file {txt_path}: {e}")
         
-        # If no bounding boxes were found in either file
         if len(bboxes) == 0:
-            print(f"No bounding boxes found for {patient_id}")
-            bboxes = np.empty((0, 4), dtype=np.float32)
-            labels = np.empty((0,), dtype=np.int64)
+            #print(f"No bounding boxes found for {patient_id}")
+            # Initialize empty tensors with correct shapes
+            empty_boxes = torch.zeros((0, 4), dtype=torch.float32)
+            empty_labels = torch.zeros(0, dtype=torch.int64)
+            empty_area = torch.zeros(0, dtype=torch.float32)
             
             # If we have labels from either file, use them
             if xml_label is not None and txt_label is not None:
                 if xml_label == txt_label:
-                    print(f"Using matching label {xml_label} for {patient_id}")
-                    labels = np.array([xml_label], dtype=np.int64)
+                    #print(f"Using matching label {xml_label} for {patient_id}")
+                    labels = torch.tensor([xml_label], dtype=torch.int64)
                 else:
-                    print(f"Warning: Label mismatch for {patient_id} - XML: {xml_label}, TXT: {txt_label}")
+                    #print(f"Warning: Label mismatch for {patient_id} - XML: {xml_label}, TXT: {txt_label}")
+                    labels = empty_labels
             elif xml_label is not None:
-                print(f"Using XML label {xml_label} for {patient_id}")
-                labels = np.array([xml_label], dtype=np.int64)
+                #print(f"Using XML label {xml_label} for {patient_id}")
+                labels = torch.tensor([xml_label], dtype=torch.int64)
             elif txt_label is not None:
-                print(f"Using TXT label {txt_label} for {patient_id}")
-                labels = np.array([txt_label], dtype=np.int64)
-        else:
-            # Convert lists to numpy arrays
-            bboxes = np.array(bboxes, dtype=np.float32)
-            labels = np.array(labels, dtype=np.int64)
+                #print(f"Using TXT label {txt_label} for {patient_id}")
+                labels = torch.tensor([txt_label], dtype=torch.int64)
+            else:
+                labels = empty_labels
 
-        # Calculate areas
-        area = (bboxes[:, 2] - bboxes[:, 0]) * (bboxes[:, 3] - bboxes[:, 1]) if bboxes.size > 0 else np.array([], dtype=np.float32)
+            target = {
+                'boxes': empty_boxes,
+                'labels': labels,
+                'image_id': torch.tensor([index]),
+                'area': empty_area,
+                'patient_id': patient_id
+            }
+            # Convert image and apply transforms
+            image = (image * 255).astype(np.uint8)
+            image_pil = ToPILImage()(image)
+            if self.transforms:
+                image = self.transforms(image_pil)
+                
+            return image, target
+
+        # Convert bboxes to numpy array and calculate areas
+        bboxes = np.array(bboxes)
+        if len(bboxes) > 0:
+            area = (bboxes[:, 2] - bboxes[:, 0]) * (bboxes[:, 3] - bboxes[:, 1])
+        else:
+            area = np.array([], dtype=np.float32)
         
         # Convert image to PIL and apply transforms
         image = (image * 255).astype(np.uint8)
@@ -169,7 +188,7 @@ class CustomDataset(Dataset):
             image = self.transforms(image_pil)
 
         # Normalize bounding boxes
-        if bboxes.size > 0:
+        if len(bboxes) > 0:
             bboxes[:, [0, 2]] /= self.image_width
             bboxes[:, [1, 3]] /= self.image_height
 
@@ -178,7 +197,7 @@ class CustomDataset(Dataset):
             'labels': torch.as_tensor(labels, dtype=torch.int64),
             'image_id': torch.tensor([index]),
             'area': torch.as_tensor(area, dtype=torch.float32),
-            'patient_id': patient_id  # Added patient_id to target
+            'patient_id': patient_id
         }
 
         return image, target
@@ -206,13 +225,10 @@ def transform_data():
     )
 
     print("Testing one sample from training dataset:")
-    # for j in range(len(train_dataset)):
-    #     i, a = train_dataset[j]
-    #     print("Image shape:", i.shape)
-    #     print("Annotations:", a)
     i, a = train_dataset[2020]
     print("Image shape:", i.shape)
     print("Annotations:", a)  
+    
     print("Saving datasets to pickle files...")
     with open('train_dataset.pkl', 'wb') as f:
         pickle.dump(train_dataset, f)
